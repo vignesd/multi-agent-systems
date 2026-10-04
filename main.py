@@ -2,43 +2,35 @@ import asyncio
 from langchain.messages import HumanMessage
 from graph.workflow import build_workflow
 
-async def main(query:str):
+from logging_config import setup_logging
+
+setup_logging()
+
+async def main(query: str):
+    # 1. Compile the graph
     graph = await build_workflow()
-#     query = """
-# Find 2 available flights from Dubai to London
-# for December 5, 2026.
 
-# For each flight:
-# - Show airline
-# - Show flight number
-# - Show departure time
-# - Show arrival time
-# - Show price
-# - Convert the price to INR
-# - Tell me the current time in London
-# """
+    # 2. Define initial state matching the updated AgentState schema
+    initial_state = {
+        "messages": [HumanMessage(content=query)],
+        "task_queue": [],
+        "next_agent": "",
+        "current_sub_task": None,
+    }
 
-    result = await graph.ainvoke(
-        {
-            "messages": [
-                HumanMessage(content=query)
-            ],
-            "next_agent": "",
-            "travel_result": "",
-            "currency_result": "",
-            "worldclock_result": "",
-        }
-    )
+    # 3. Invoke the workflow
+    result = await graph.ainvoke(initial_state)
 
+    # 4. Print final synthesized output
     print("\n==============================")
     print("FINAL RESPONSE")
     print("==============================\n")
-
     print(result["messages"][-1].content)
 
 
 if __name__ == "__main__":
     test_prompts = [
+        "Find flights on Nov 4, 2026 from Delhi to Chennai, Bangalore to France, and Tokyo to Singapore. and convert 200 dollars to indian, france  and london money",
     # ---------------------------------------------------------
     # 1. Single-Agent Test Prompts
     # ---------------------------------------------------------
@@ -65,13 +57,10 @@ if __name__ == "__main__":
     "Can you write a Python script to perform binary search on an array?",
     "Who was the first president of the United States?",
     "What is the weather in Paris, and what is the current time there?",
+    "How do i reset my phone password?"
 ]
-    for question in test_prompts[8:9]:
+    for question in test_prompts[2:4]:
+         question=test_prompts[-1]
          print(f"Question - {question}")
-         question="""
-         Find a flight on 4th nov 26 for
-            From Delhi to chennai
-            Bangalore to France and Tokoyo to singapore 
-         """
          asyncio.run(main(question))
          break

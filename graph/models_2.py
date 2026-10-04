@@ -1,15 +1,6 @@
 from enum import Enum
-from typing import Dict, List, Optional
+from typing import List, Optional
 from pydantic import BaseModel, Field
-
-# Graph routing map defined at the top level
-AgentMap: Dict[str, str] = {
-    "travel": "travel",
-    "currency": "currency",
-    "worldclock": "worldclock",
-    "defi": "defi",
-    "finish": "final",
-}
 
 
 class AgentRoute(str, Enum):
@@ -35,9 +26,17 @@ class InitialPlan(BaseModel):
     )
     rejection_reason: Optional[str] = Field(
         default=None,
-        description="Explanation if is_supported is False (e.g., 'Request is out of scope for available agents.')",
+        description="Explanation if is_supported is False (e.g., 'Request is out of scope for available agents.')"
     )
     tasks: List[SubTask] = Field(
         default_factory=list,
-        description="List of valid sub-tasks. MUST be empty if is_supported is False. NEVER create 'N/A' or dummy tasks.",
+        description="List of valid sub-tasks. MUST be empty if is_supported is False. NEVER create 'N/A' or dummy tasks."
     )
+
+    AgentMap = {
+    "travel": "travel",
+    "currency": "currency",
+    "worldclock": "worldclock",
+    "defi": "defi",
+    "finish": "final",
+}

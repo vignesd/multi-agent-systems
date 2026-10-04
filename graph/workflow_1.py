@@ -1,5 +1,7 @@
 import logging
+from enum import Enum
 from typing import List, Optional
+
 
 from langchain.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -11,15 +13,15 @@ from agents.travel_agent import create_travel_agent
 from agents.worldclock_agent import create_worldclock_agent
 from config import MODEL
 
-from graph.models import AgentMap, InitialPlan, SubTask
 from graph.state import AgentState, TaskItem
+from graph.models import AgentMap,SubTask,InitialPlan
 
-logger = logging.getLogger(__name__)
 
+logger=logging.getLogger(__name__)
 
 async def build_workflow():
     model = ChatOpenAI(model=MODEL, temperature=0.0)
-
+    
     # Model configured with structured output to guarantee valid task decomposition
     planner_model = model.with_structured_output(InitialPlan)
 
@@ -30,20 +32,20 @@ async def build_workflow():
     defi_agent = await create_defi_agent(model)
 
     # ---------------------------------------------------------
-    # Supervisor Node: Task Queue Manager & Domain Guardrail
+    # Supervisor Node: Task Queue Manager & Router
     # ---------------------------------------------------------
     async def supervisor_node(state: AgentState):
         """
         State Machine Logic:
-        1. Parse user request and decompose into atomic TaskItems.
-        2. Validate if query falls under supported domain capabilities.
-        3. If out-of-scope, route immediately to final synthesis node with rejection message.
-        4. Execute queue items sequentially, skipping empty or dummy N/A tasks.
-        5. Route to 'finish' (final node) when task queue is exhausted.
+        1. If task_queue is empty, parse user request and decompose into atomic TaskItems.
+        2. Scan task_queue sequentially for the first item where completed == False.
+        3. If an uncompleted task exists: mark completed = True, set next_agent and current_sub_task.
+        4. If all tasks are completed: set next_agent = 'finish'.
         """
+        # Shallow copy queue from state or initialize empty
         task_queue: List[TaskItem] = list(state.get("task_queue") or [])
 
-        # PHASE 1: INITIAL DECOMPOSITION & GUARDRAIL CHECK (Turn 1)
+        # PHASE 1: INITIAL DECOMPOSITION (Runs only on Turn 1)
         if not task_queue and state.get("messages"):
             user_request = state["messages"][0].content
             logger.info("=" * 70)
@@ -52,62 +54,35 @@ async def build_workflow():
 
             planner_prompt = SystemMessage(
                 content="""
-You are an expert Task Planning Agent coordinating SPECIALIST sub-agents ONLY.
+You are an expert Task Planning Agent.
 
-Supported Domains:
+Decompose the user's query into an ordered list of atomic, isolated sub-tasks.
+Each task MUST be assigned to one of four specialists:
 1. 'travel'     : Flight searches, itineraries, location travel info.
 2. 'currency'   : Exchange rates, monetary conversions.
 3. 'worldclock' : Current time, time zone calculations.
 4. 'defi'       : Crypto liquidity pools, risk/entry/exit signals.
 
-STRICT DOMAIN BOUNDARY RULES:
-- If the user request does NOT fall into one of the 4 supported domains above (e.g., phone password resets, general tech support, general coding, recipes):
-  * Do NOT assign it to any agent.
-  * If the schema includes `is_supported`, set `is_supported` to False and state the `rejection_reason`.
-  * Return an empty list for `tasks`.
-- NEVER assign unrelated topics to a specialist (e.g., NEVER route tech/password support to 'travel').
-- NEVER generate dummy, filler, or 'N/A' sub-tasks.
-- Write each valid 'query' as a clear, self-contained instruction.
+CRITICAL RULES:
+- If a query asks for multiple routes or items for the SAME domain (e.g., 3 different flight routes), create SEPARATE sub-tasks for each item.
+- Write each 'query' as a clear, self-contained instruction. Do not rely on conversational context.
 """
             )
-
+            
             plan: InitialPlan = await planner_model.ainvoke(
                 [planner_prompt, state["messages"][0]]
             )
 
-            # Extract fields safely regardless of schema variation
-            is_supported = getattr(plan, "is_supported", True)
-            rejection_reason = getattr(plan, "rejection_reason", None)
-
-            # Filter valid, non-empty, non-N/A subtasks
-            valid_tasks: List[TaskItem] = []
-            if hasattr(plan, "tasks") and plan.tasks:
-                for item in plan.tasks:
-                    query_str = item.query.strip() if item.query else ""
-                    if query_str and query_str.upper() not in ["N/A", "NONE", "NULL"]:
-                        valid_tasks.append(
-                            {
-                                "agent": item.agent.strip().lower(),
-                                "query": query_str,
-                                "completed": False,
-                            }
-                        )
-
-            # GUARDRAIL TRIGGER: Unsupported Domain or Empty Task Queue
-            if not is_supported or not valid_tasks:
-                reason = (
-                    rejection_reason
-                    or "Request is outside the supported domains (Travel, Currency, World Clock, DeFi)."
+            # Convert Pydantic models to TaskItem dictionaries for LangGraph state
+            for item in plan.tasks:
+                task_queue.append(
+                    {
+                        "agent": item.agent.strip().lower(),
+                        "query": item.query,
+                        "completed": False,
+                    }
                 )
-                logger.warning(f"[DOMAIN GUARDRAIL] Out-of-Scope Query Detected: {reason}")
-                return {
-                    "next_agent": "finish",
-                    "current_sub_task": None,
-                    "task_queue": [],
-                    "messages": [AIMessage(content=f"OUT_OF_SCOPE: {reason}")],
-                }
 
-            task_queue = valid_tasks
             logger.info(f"Generated Task Queue ({len(task_queue)} sub-tasks):")
             for idx, task in enumerate(task_queue, 1):
                 logger.info(f"Task {idx}: [{task['agent'].upper()}] -> {task['query']}")
@@ -121,6 +96,7 @@ STRICT DOMAIN BOUNDARY RULES:
                 break
 
         if next_task:
+            # Mark task as completed so next supervisor turn moves to the next queue item
             next_task["completed"] = True
             next_agent = next_task["agent"]
             current_sub_task = next_task["query"]
@@ -131,6 +107,7 @@ STRICT DOMAIN BOUNDARY RULES:
             logger.info(f"Routing To       : {next_agent}")
             logger.info(f"Dispatching Query: {current_sub_task}")
         else:
+            # All tasks in the queue have been executed
             next_agent = "finish"
             current_sub_task = None
             logger.info("SUPERVISOR ROUTING DECISION")
@@ -140,7 +117,7 @@ STRICT DOMAIN BOUNDARY RULES:
         return {
             "next_agent": next_agent,
             "current_sub_task": current_sub_task,
-            "task_queue": task_queue,
+            "task_queue": task_queue,  # Updates persistent queue state
         }
 
     # ---------------------------------------------------------
@@ -150,8 +127,11 @@ STRICT DOMAIN BOUNDARY RULES:
         sub_task = state["current_sub_task"]
         logger.info(f"Executing: {sub_task}")
 
+        # Invoke sub-agent with isolated query (prevents full history leakage)
         result = await travel_agent.ainvoke({"messages": [HumanMessage(content=sub_task)]})
         content = result["messages"][-1].content
+        
+        # logger.info(f"Complete. Response length: {len(content)} chars")
 
         return {
             "messages": [AIMessage(content=f"Sub-Task Result ({sub_task}):\n{content}")],
@@ -163,6 +143,8 @@ STRICT DOMAIN BOUNDARY RULES:
 
         result = await currency_agent.ainvoke({"messages": [HumanMessage(content=sub_task)]})
         content = result["messages"][-1].content
+        
+        # logger.info(f"[NODE EXECUTION: CURRENCY] Complete. Response length: {len(content)} chars")
 
         return {
             "messages": [AIMessage(content=f"Sub-Task Result ({sub_task}):\n{content}")],
@@ -174,6 +156,7 @@ STRICT DOMAIN BOUNDARY RULES:
 
         result = await worldclock_agent.ainvoke({"messages": [HumanMessage(content=sub_task)]})
         content = result["messages"][-1].content
+        
         logger.info(f"Complete. Response length: {len(content)} chars")
 
         return {
@@ -186,37 +169,18 @@ STRICT DOMAIN BOUNDARY RULES:
 
         result = await defi_agent.ainvoke({"messages": [HumanMessage(content=sub_task)]})
         content = result["messages"][-1].content
+        
+        # logger.info(f"[NODE EXECUTION: DEFI] Complete. Response length: {len(content)} chars")
 
         return {
             "messages": [AIMessage(content=f"Sub-Task Result ({sub_task}):\n{content}")],
         }
 
     # ---------------------------------------------------------
-    # Final Synthesis Node (Handles Normal Output & Refusals)
+    # Final Synthesis Node
     # ---------------------------------------------------------
     async def final_node(state: AgentState):
         logger.info("Compiling final unified output for user...")
-
-        # # Guardrail Refusal Handler
-        # last_msg = state["messages"][-1].content if state.get("messages") else ""
-        # if isinstance(last_msg, str) and "OUT_OF_SCOPE:" in last_msg:
-        #     clean_reason = last_msg.replace("OUT_OF_SCOPE:", "").strip()
-        #     refusal_response = (
-        #         f"I am sorry, but I cannot assist with that request. "
-        #         f"I am a specialized assistant trained exclusively for **Travel**, **Currency Conversions**, "
-        #         f"**World Clock**, and **DeFi Metrics**.\n\n"
-        #         f"**Reason:** {clean_reason}"
-        #     )
-        #     return {"messages": [AIMessage(content=refusal_response)]}
-# Guardrail Refusal Handler
-        last_msg = state["messages"][-1].content if state.get("messages") else ""
-        if isinstance(last_msg, str) and "OUT_OF_SCOPE:" in last_msg:
-            refusal_response = (
-                "I am sorry, but I cannot assist with that request. "
-                "I am a specialized assistant trained exclusively for **Travel**, **Currency Conversions**, "
-                "**World Clock**, and **DeFi Metrics**."
-            )
-            return {"messages": [AIMessage(content=refusal_response)]}
 
         final_prompt = SystemMessage(
             content="""
@@ -258,7 +222,7 @@ Rules:
         AgentMap,
     )
 
-    # Specialist nodes loop back to supervisor to process remaining queue items
+    # Specialist nodes always loop back to supervisor to process remaining queue items
     workflow.add_edge("travel", "supervisor")
     workflow.add_edge("currency", "supervisor")
     workflow.add_edge("worldclock", "supervisor")
