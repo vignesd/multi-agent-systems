@@ -60,7 +60,7 @@ if __name__ == "__main__":
     "How do i reset my phone password?"
 ]
     for question in test_prompts[2:4]:
-         question=test_prompts[-1]
+         question=input("Enter your prompt -")
          print(f"Question - {question}")
          asyncio.run(main(question))
          break

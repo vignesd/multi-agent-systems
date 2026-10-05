@@ -8,6 +8,7 @@ AgentMap: Dict[str, str] = {
     "currency": "currency",
     "worldclock": "worldclock",
     "defi": "defi",
+    "websearch":"websearch",
     "finish": "final",
 }
 
@@ -17,6 +18,7 @@ class AgentRoute(str, Enum):
     CURRENCY = "currency"
     WORLDCLOCK = "worldclock"
     DEFI = "defi"
+    WEBSEARCH="websearch"
     FINISH = "finish"
 
 
@@ -31,7 +33,7 @@ class SubTask(BaseModel):
 
 class InitialPlan(BaseModel):
     is_supported: bool = Field(
-        description="Set to True ONLY if the user request falls under travel, currency, worldclock, or defi. Set to False for all other topics (e.g. general tech support, phone reset, cooking, general coding)."
+        description="Set to True ONLY if the user request falls under travel, currency, worldclock, websearch, or defi. Set to False for all other topics (e.g. general tech support, phone reset, cooking, general coding)."
     )
     rejection_reason: Optional[str] = Field(
         default=None,

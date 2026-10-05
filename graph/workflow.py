@@ -9,6 +9,7 @@ from agents.currency_agent import create_currency_agent
 from agents.defi_agent import create_defi_agent
 from agents.travel_agent import create_travel_agent
 from agents.worldclock_agent import create_worldclock_agent
+from agents.websearch_agent import create_websearch_agent
 from config import MODEL
 
 from graph.models import AgentMap, InitialPlan, SubTask
@@ -28,6 +29,7 @@ async def build_workflow():
     currency_agent = await create_currency_agent(model)
     worldclock_agent = await create_worldclock_agent(model)
     defi_agent = await create_defi_agent(model)
+    websearch_agent=await create_websearch_agent(model)
 
     # ---------------------------------------------------------
     # Supervisor Node: Task Queue Manager & Domain Guardrail
@@ -59,6 +61,7 @@ Supported Domains:
 2. 'currency'   : Exchange rates, monetary conversions.
 3. 'worldclock' : Current time, time zone calculations.
 4. 'defi'       : Crypto liquidity pools, risk/entry/exit signals.
+5. 'websearch'  : Web searches for real-time news, facts, and current information, content extraction from specific URLs.
 
 STRICT DOMAIN BOUNDARY RULES:
 - If the user request does NOT fall into one of the 4 supported domains above (e.g., phone password resets, general tech support, general coding, recipes):
@@ -191,23 +194,24 @@ STRICT DOMAIN BOUNDARY RULES:
             "messages": [AIMessage(content=f"Sub-Task Result ({sub_task}):\n{content}")],
         }
 
+
+    async def websearch_node(state:AgentState):
+        sub_task = state["current_sub_task"]
+        logger.info(f"Executing: {sub_task}")
+
+        result = await websearch_agent.ainvoke({"messages": [HumanMessage(content=sub_task)]})
+        content = result["messages"][-1].content
+
+        return {
+            "messages": [AIMessage(content=f"Sub-Task Result ({sub_task}):\n{content}")],
+        }
+
+
     # ---------------------------------------------------------
     # Final Synthesis Node (Handles Normal Output & Refusals)
     # ---------------------------------------------------------
     async def final_node(state: AgentState):
         logger.info("Compiling final unified output for user...")
-
-        # # Guardrail Refusal Handler
-        # last_msg = state["messages"][-1].content if state.get("messages") else ""
-        # if isinstance(last_msg, str) and "OUT_OF_SCOPE:" in last_msg:
-        #     clean_reason = last_msg.replace("OUT_OF_SCOPE:", "").strip()
-        #     refusal_response = (
-        #         f"I am sorry, but I cannot assist with that request. "
-        #         f"I am a specialized assistant trained exclusively for **Travel**, **Currency Conversions**, "
-        #         f"**World Clock**, and **DeFi Metrics**.\n\n"
-        #         f"**Reason:** {clean_reason}"
-        #     )
-        #     return {"messages": [AIMessage(content=refusal_response)]}
 # Guardrail Refusal Handler
         last_msg = state["messages"][-1].content if state.get("messages") else ""
         if isinstance(last_msg, str) and "OUT_OF_SCOPE:" in last_msg:
@@ -246,6 +250,7 @@ Rules:
     workflow.add_node("currency", currency_node)
     workflow.add_node("worldclock", worldclock_node)
     workflow.add_node("defi", defi_node)
+    workflow.add_node("websearch", websearch_node)
     workflow.add_node("final", final_node)
 
     # Set Entry Point
@@ -263,6 +268,7 @@ Rules:
     workflow.add_edge("currency", "supervisor")
     workflow.add_edge("worldclock", "supervisor")
     workflow.add_edge("defi", "supervisor")
+    workflow.add_edge("websearch","supervisor")
 
     # Final Node terminates execution
     workflow.add_edge("final", END)
