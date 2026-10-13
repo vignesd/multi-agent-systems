@@ -1,3 +1,4 @@
+from typing import Literal
 from enum import Enum
 from typing import Dict, List, Optional
 from pydantic import BaseModel, Field
@@ -8,9 +9,18 @@ AgentMap: Dict[str, str] = {
     "currency": "currency",
     "worldclock": "worldclock",
     "defi": "defi",
-    "websearch":"websearch",
+    "websearch": "websearch",
     "finish": "final",
 }
+
+
+AgentName = Literal[
+    "travel",
+    "currency",
+    "worldclock",
+    "defi",
+    "websearch",
+]
 
 
 class AgentRoute(str, Enum):
@@ -18,8 +28,8 @@ class AgentRoute(str, Enum):
     CURRENCY = "currency"
     WORLDCLOCK = "worldclock"
     DEFI = "defi"
-    WEBSEARCH="websearch"
-    FINISH = "finish"
+    WEBSEARCH = "websearch"
+    FINISH = "final"
 
 
 class SubTask(BaseModel):
