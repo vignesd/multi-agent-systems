@@ -8,7 +8,9 @@ from typing import Any
 from langchain_core.messages import AIMessage, HumanMessage
 from langchain_openai import ChatOpenAI
 
-from agents.travel_agent import create_travel_agent
+# from deepagents.middleware.subagents import SubAgentMiddleware
+
+from agents.chinook_agent import create_customer_agent
 from config import MODEL
 from logging_config import setup_logging
 
@@ -58,28 +60,29 @@ def get_final_answer(result: dict[str, Any]) -> str:
             if answer:
                 return answer
 
-    return "The travel agent did not return a text response."
+    return "The chinook customer agent did not return a text response."
 
 
-async def run_travel_chat() -> None:
-    """Run a continuous terminal chat using only the travel agent."""
+async def run_customer_chat() -> None:
+    """Run a continuous terminal chat using only the chinook customer agent."""
 
     setup_logging()
 
-    logger.info("Starting travel client with model: %s", MODEL)
+    logger.info("Starting chinook customer client with model: %s", MODEL)
 
-    # Initialize the model and ONLY the travel agent.
+    # Initialize the model and ONLY the chinook customer agent.
     model = ChatOpenAI(
         model=MODEL,
         temperature=0.2,
     )
 
     try:
-        travel_agent = await create_travel_agent(model)
+        customer_agent = await create_customer_agent(model)
+
     except Exception:
-        logger.exception("Failed to initialize the travel agent")
+        logger.exception("Failed to initialize the customer agent")
         print(
-            "\nCould not initialize the travel agent. "
+            "\nCould not initialize the chinook customer agent. "
             "Check your API key, MCP server connection, and logs."
         )
         return
@@ -88,17 +91,17 @@ async def run_travel_chat() -> None:
     # or the user enters "clear".
     conversation_history: list[Any] = []
 
-    print("\nTravel Assistant is ready.")
+    print("\nchinook customer Assistant is ready.")
     print(f"Model: {MODEL}")
     print("Available commands: clear, exit, quit")
-    print("Ask about flights, routes, fares, or other supported travel tasks.")
+    print("Ask about customer details by ID/Email or Customer Invoices or other supported chinook customer tasks.")
     print("-" * 60)
 
     while True:
         try:
             query = input("\nYou: ").strip()
         except (EOFError, KeyboardInterrupt):
-            print("\nEnding travel session.")
+            print("\nEnding chinook customer session.")
             break
 
         if not query:
@@ -107,7 +110,7 @@ async def run_travel_chat() -> None:
         command = query.lower()
 
         if command in EXIT_COMMANDS:
-            print("Travel session ended.")
+            print("chinook customer session ended.")
             break
 
         if command == CLEAR_COMMAND:
@@ -122,7 +125,7 @@ async def run_travel_chat() -> None:
         ]
 
         try:
-            result = await travel_agent.ainvoke(
+            result = await customer_agent.ainvoke(
                 {"messages": messages}
             )
 
@@ -142,15 +145,18 @@ async def run_travel_chat() -> None:
                     ]
                 )
 
-            print(f"\nTravel Assistant:\n{answer}")
+            print(f"\nchinook Assistant:\n{answer}")
+            # print(f"Converstation len - {len(conversation_history)}")
+            # if len(conversation_history) >= 10:
+            #     print(f"Summary - {conversation_history[0]}")
 
         except Exception:
-            logger.exception("Travel request failed")
+            logger.exception("chinook customer request failed")
             print(
-                "\nSorry, the travel request failed. "
+                "\nSorry, the chinook customer request failed. "
                 "Check the logs and try again."
             )
 
 
 if __name__ == "__main__":
-    asyncio.run(run_travel_chat())
+    asyncio.run(run_customer_chat())

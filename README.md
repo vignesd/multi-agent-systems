@@ -1,157 +1,157 @@
 # Multi-Agent Systems
 
-A Python-based multi-agent orchestration project built with LangGraph and LangChain. The system routes a user request to specialist agents for travel, currency conversion, world clock, DeFi, and web search, then combines the results into a single final response.
+A Python project exploring tool-using AI agents, MCP integrations, middleware, and multi-agent orchestration. It includes two focused terminal assistants—a Travel Assistant and a Chinook database assistant—and a LangGraph workflow that can coordinate specialist agents across several domains.
 
-## Overview
+## What it does
 
-This project demonstrates a supervisor-driven agent architecture:
+- **Travel Assistant:** uses the Kiwi MCP server for live flight and travel queries.
+- **Chinook Assistant:** connects to an API-key-protected Chinook database MCP server and answers questions using the tools it exposes.
+- **Multi-agent workflow:** plans and routes requests to Travel, Currency, World Clock, DeFi, and Web Search specialists, then synthesizes their results. Supported tasks can be retried, and incomplete results are reported rather than invented.
+- **Conversation middleware:** summarizes longer chats, masks detected email addresses and phone numbers in assistant output, and blocks a set of common prompt-injection phrases in the Chinook assistant.
 
-- A supervisor agent decomposes each user request into focused sub-tasks.
-- Specialist agents handle domain-specific work using external MCP tool servers.
-- A final synthesis step combines the collected results into one natural answer.
-- Failed specialist tasks are retried with bounded attempts before being reported honestly.
-
-The supported domains are:
-
-- Travel planning and flight search
-- Currency exchange and conversion
-- World clock and timezone conversion
-- DeFi / liquidity pool analysis
-- Web search and extraction
+The focused clients are useful for exploring one integration at a time. The LangGraph workflow is the entry point for requests that may need more than one specialist.
 
 ## Architecture
 
-The project is organized into a small set of core components:
+```text
+Focused clients
+  clients/travel_client.py  -> Travel agent  -> Kiwi MCP server
+  clients/chinook_client.py -> Chinook agent -> Authenticated Chinook MCP server
 
-- `main.py` — interactive CLI entry point for chat-style requests.
-- `config.py` — environment and logging configuration.
-- `graph/workflow.py` — LangGraph workflow, supervisor logic, task queue, retries, and final synthesis.
-- `graph/models.py` — structured schemas for agent planning and task definitions.
-- `graph/state.py` — typed workflow state for the orchestration graph.
-- `agents/` — specialist agent implementations for each domain.
+Orchestrated workflow
+  main.py -> LangGraph supervisor -> specialist agent(s) -> final response
+                                      ├─ Travel
+                                      ├─ Currency
+                                      ├─ World Clock
+                                      ├─ DeFi
+                                      └─ Web Search
+```
 
-### Workflow flow
+The workflow plans tasks for the current request, executes them through domain-specific agents, and combines successful results. It makes up to three attempts for a specialist task before marking it incomplete.
 
-1. The CLI sends the user message into the LangGraph workflow.
-2. The supervisor plans one or more sub-tasks based on the query.
-3. For each task, a domain specialist agent executes the work using MCP-backed tools.
-4. Results are appended to the state and routed back to the supervisor.
-5. Once all tasks are handled, a final agent compiles the response.
-
-## Specialist agents
-
-The project includes domain-specific specialist agents: 
-
-- `travel_agent.py` — flight and travel information using the Kiwi MCP server.
-- `currency_agent.py` — exchange-rate conversion using the currency MCP service.
-- `worldclock_agent.py` — current time and timezone queries using the World Clock MCP service.
-- `defi_agent.py` — DeFi signal and liquidity pool analysis using the Wealthville MCP service.
-- `websearch_agent.py` — web search and content extraction using Tavily MCP capabilities.
-
-These agents are created as LangChain tool-using agents that use live MCP tools rather than static prompts alone.
-
-## Project structure
+## Project layout
 
 ```text
 .
-├── README.md
-├── config.py
-├── coordinate.py
-├── logging_config.py
-├── main.py
-├── pyproject.toml
-├── travel_client.py
-├── uv.lock
-├── agents/
-│   ├── __init__.py
-│   ├── currency_agent.py
-│   ├── defi_agent.py
-│   ├── travel_agent.py
-│   ├── websearch_agent.py
-│   └── worldclock_agent.py
-├── graph/
-│   ├── __init__.py
-│   ├── models.py
-│   ├── state.py
-│   └── workflow.py
-├── notebooks/
-│   └── practice.ipynb
-└── .env (local environment file, not tracked)
+├── agents/                 # Domain-specific agent and MCP tool setup
+├── clients/                # Independent Travel and Chinook terminal clients
+├── graph/                  # LangGraph workflow, state, and planning schemas
+├── middleware/             # Conversation summarization, PII, and prompt guard
+├── prompts/                # Agent and summarization prompts
+├── notebooks/              # Development notebook
+├── clients.py              # Chinook client convenience entry point
+├── config.py               # Model and application settings
+├── logging_config.py       # Console and optional rotating-file logging
+├── main.py                 # Multi-agent workflow chat entry point
+├── pyproject.toml          # Project metadata and dependencies
+└── uv.lock                 # Locked dependency versions
 ```
 
-## Prerequisites
+## Requirements
 
-- Python 3.13+
-- An OpenAI-compatible model available through LangChain/OpenAI
-- API keys for the services used by the agents
-- `uv` for dependency management (recommended)
+- Python 3.13 or newer
+- [uv](https://docs.astral.sh/uv/) for dependency and virtual-environment management
+- An OpenAI API key for the configured chat model
+- Additional service credentials depending on the client or workflow you run
 
-## Getting started
+## Setup
 
-1. Clone the repository:
+1. Clone the repository and enter the project directory:
+
+   ```bash
+   git clone https://github.com/vignesd/multi-agent-systems.git
+   cd multi-agent-systems
+   ```
+
+2. Install the project dependencies:
+
+   ```bash
+   uv sync
+   ```
+
+3. Copy `.env.example` to `.env` in the project root, then replace its placeholder values with your own credentials. On Windows PowerShell, use `Copy-Item .env.example .env`; on macOS or Linux, use `cp .env.example .env`.
+
+   Set `OPENAI_API_KEY` and, as needed, add or update these values:
+
+   | Variable | Required for | Description |
+   | --- | --- | --- |
+   | `OPENAI_API_KEY` | All clients | OpenAI API key used by the chat model. |
+   | `MODEL` | Optional | Model name; defaults to `gpt-4o-mini`. |
+   | `CHINOOK_MCP_SERVER_API_KEY` | Chinook client | API key for the configured Chinook MCP server. |
+   | `TAVILY_API_KEY` | Full multi-agent workflow | Tavily key used by the Web Search specialist. |
+   | `LANGSMITH_API_KEY` and `LANGSMITH_TRACING` | Optional tracing | Configure LangSmith tracing if desired. |
+
+`MODEL` is optional; the default is `gpt-4o-mini`. Keep real credentials in your local `.env` file and never commit them. The Chinook API key is sent as a Bearer token to the configured MCP server.
+
+## Run the assistants
+
+### Travel Assistant
 
 ```bash
-git clone https://github.com/vignesd/multi-agent-systems.git
-cd multi-agent-systems
+uv run python -m clients.travel_client
 ```
 
-2. Create and configure your environment variables in a `.env` file:
-
-```env
-OPENAI_API_KEY=your_openai_api_key
-MODEL=gpt-4o-mini
-TAVILY_API_KEY=your_tavily_api_key
-```
-
-3. Install dependencies:
+### Chinook database Assistant
 
 ```bash
-uv sync
+uv run python -m clients.chinook_client
 ```
 
-4. Run the interactive chat app:
+The root-level `clients.py` file is also a Chinook-only convenience entry point:
+
+```bash
+uv run python clients.py
+```
+
+### Multi-agent workflow
 
 ```bash
 uv run python main.py
 ```
 
-## Usage
+The workflow initializes all five specialist agents, so its external MCP services—including Tavily for Web Search—must be reachable and correctly configured before the chat can start.
 
-Once the app starts, you can ask questions such as:
+Each chat runs in the terminal. Enter `clear` to clear the current in-memory conversation or `exit` / `quit` to end the session. Conversation history is not persisted after the process exits.
 
-- "What is the current exchange rate from USD to EUR?"
-- "Find me flights from New York to London next week."
-- "What time is it in Tokyo right now?"
-- "Compare the best DeFi pools with liquidity signals."
-- "Search for recent updates on AI regulation in Europe."
+## Example requests
 
-The assistant will reason over the request, assign relevant tasks, and return a synthesized response.
+**Travel client**
 
-## Notes
+- “Find flights from Boston to Paris next month.”
+- “What are the available travel options from New York to London?”
 
-- The workflow enforces supported domain checks and rejects unsupported requests.
-- Specialist agents are designed to rely on external tool data rather than guessing.
-- For web search, the Tavily API key must be present.
-- For model access, the OpenAI API key must be available in the environment.
+**Chinook client**
 
-## Example flow
+- “Find the customer with this email address.”
+- “Summarize the invoices for customer ID 5.”
+- “Search the database for tracks by this artist.”
 
-```text
-User: Find the best flight from Boston to Paris in two weeks and convert the estimated price to EUR.
+The Chinook assistant can only answer questions supported by the MCP tools enabled by the connected server.
 
-Supervisor:
-- travel: search flight options and provide fare details
-- currency: convert fare amount to EUR
+**Multi-agent workflow**
 
-Final answer:
-- Summarized flight choices
-- Currency-converted total in EUR
-```
+- “What is the current exchange rate from USD to EUR?”
+- “What time is it in Tokyo?”
+- “Search for recent news about AI regulation in Europe.”
+- “Find a flight from Boston to Paris and convert its price to EUR.”
+- “Compare recent DeFi signals with current information from the web.”
+
+Live data, available operations, and response quality depend on the connected MCP services and configured model.
+
+## Middleware and conversation behavior
+
+- The conversation summarizer is configured to summarize when the message history reaches 50 messages and retain the most recent 10 messages.
+- The Chinook client masks detected email addresses in assistant output and phone numbers in assistant output and tool results.
+- The Chinook prompt-injection guard rejects a defined set of common instruction-override patterns before agent execution. It is a basic safeguard, not a general-purpose security boundary.
+
+## Configuration and logging
+
+Application and logging settings can be provided through environment variables. The main settings include `APP_ENV`, `LOG_LEVEL`, `LOG_TO_FILE`, `LOG_FILE`, `LOG_MAX_BYTES`, and `LOG_BACKUP_COUNT`. File logging is disabled by default; when enabled, logs rotate at the configured size.
+
+## Development
+
+`pytest` and `pytest-asyncio` are included in the project dependencies, but no automated test suite is currently checked in.
 
 ## License
 
-This project does not currently declare a license in the repository.
-
-## Contributing
-
-Contributions are welcome. Please keep changes focused, document new agents or workflow changes, and validate behavior with the existing test setup when available.
+No license is currently declared in this repository.
