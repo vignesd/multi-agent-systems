@@ -2,6 +2,7 @@
 from dotenv import load_dotenv
 import os
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from middleware.agent_middleware import get_default_middleware
 from langchain.agents import create_agent
 import asyncio
 
@@ -26,6 +27,7 @@ async def create_websearch_agent(model):
     agent=create_agent(
         model=model,
         tools=tools,
+        middleware=get_default_middleware(model),
         system_prompt="""
 You are the Web Research Specialist Agent.
 

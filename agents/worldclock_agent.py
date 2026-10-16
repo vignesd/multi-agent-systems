@@ -1,5 +1,6 @@
 from langchain.agents import create_agent
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from middleware.agent_middleware import get_default_middleware
 
 
 WORLDCLOCK_MCP_URL = "https://worldclock.pro/mcp"
@@ -26,6 +27,7 @@ async def create_worldclock_agent(model):
     agent = create_agent(
         model=model,
         tools=tools,
+        middleware=get_default_middleware(model),
         system_prompt="""
 You are the World Clock Specialist Agent.
 

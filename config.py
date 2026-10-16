@@ -7,6 +7,14 @@ load_dotenv()
 
 MODEL = os.getenv("MODEL", "gpt-4o-mini")
 
+# Backup model used by ModelFallbackMiddleware when the primary model keeps failing.
+FALLBACK_MODEL = os.getenv("FALLBACK_MODEL", "gpt-4o")
+
+# Models offered in the UI model picker; the configured default is always included.
+AVAILABLE_MODELS = list(dict.fromkeys(
+    [MODEL, "gpt-4o-mini", "gpt-4o", "gpt-4.1-mini", "gpt-4.1"]
+))
+
 class Settings(BaseSettings):
     # DATABASE_URL: str
     # TEST_DATABASE_URL: str | None = None

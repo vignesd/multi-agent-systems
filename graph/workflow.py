@@ -30,8 +30,8 @@ SUPPORTED_AGENTS = {
 }
 
 
-async def build_workflow():
-    model = ChatOpenAI(model=MODEL, temperature=0.0)
+async def build_workflow(model_name: str = MODEL):
+    model = ChatOpenAI(model=model_name, temperature=0.0)
     planner_model = model.with_structured_output(InitialPlan)
 
     # Initialize specialist agents once.

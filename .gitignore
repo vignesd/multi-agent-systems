@@ -49,3 +49,6 @@ pytest*
 tests*
 others*
 .pytest*
+# Untracked UI export copies
+_chinook_ui_bundle/
+chinook_streamlit_ui.zip

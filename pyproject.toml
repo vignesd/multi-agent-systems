@@ -26,3 +26,6 @@ dependencies = [
     "pytest-asyncio>=1.4.0",
     "langchain-community>=0.4.2",
 ]
+
+[project.optional-dependencies]
+ui = ["streamlit>=1.40.0"]

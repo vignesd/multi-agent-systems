@@ -10,6 +10,7 @@ from langchain_openai import ChatOpenAI
 
 from agents.travel_agent import create_travel_agent
 from config import MODEL
+from utils.messages import get_final_answer
 from logging_config import setup_logging
 
 
@@ -17,48 +18,6 @@ logger = logging.getLogger(__name__)
 
 EXIT_COMMANDS = {"exit", "quit"}
 CLEAR_COMMAND = "clear"
-
-
-def extract_text(content: Any) -> str:
-    """Convert LangChain message content into printable text."""
-
-    if isinstance(content, str):
-        return content.strip()
-
-    if isinstance(content, list):
-        parts: list[str] = []
-
-        for block in content:
-            if isinstance(block, str):
-                parts.append(block)
-            elif isinstance(block, dict):
-                # Handle common text content blocks.
-                if block.get("type") == "text":
-                    text = block.get("text")
-                    if isinstance(text, str):
-                        parts.append(text)
-
-        return "\n".join(parts).strip()
-
-    return str(content).strip() if content is not None else ""
-
-
-def get_final_answer(result: dict[str, Any]) -> str:
-    """Extract the latest assistant response from an agent result."""
-
-    messages = result.get("messages", [])
-
-    for message in reversed(messages):
-        if isinstance(message, AIMessage):
-            # Skip assistant messages that only contain tool calls.
-            if message.tool_calls:
-                continue
-
-            answer = extract_text(message.content)
-            if answer:
-                return answer
-
-    return "The travel agent did not return a text response."
 
 
 async def run_travel_chat() -> None:

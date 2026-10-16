@@ -1,6 +1,9 @@
 from langchain.agents import create_agent
 from langchain_mcp_adapters.client import MultiServerMCPClient
-from middleware.agent_middleware import get_summary_middleware
+from middleware.agent_middleware import (
+    get_default_middleware,
+    get_summary_middleware,
+)
 
 TRAVEL_MCP_URL = "https://mcp.kiwi.com"
 
@@ -27,7 +30,7 @@ async def create_travel_agent(model):
     agent = create_agent(
         model=model,
         tools=tools,
-        middleware=[summary_middleware],
+        middleware=[*get_default_middleware(model), summary_middleware],
         system_prompt="""
 You are the Travel Specialist Agent.
 

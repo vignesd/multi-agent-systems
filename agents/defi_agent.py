@@ -1,5 +1,6 @@
 from langchain.agents import create_agent
 from langchain_mcp_adapters.client import MultiServerMCPClient
+from middleware.agent_middleware import get_default_middleware
 
 
 import asyncio
@@ -34,6 +35,7 @@ async def create_defi_agent(model):
     agent = create_agent(
         model=model,
         tools=tools,
+        middleware=get_default_middleware(model),
         system_prompt="""
 You are the DeFi Specialist Agent.
 
